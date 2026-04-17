@@ -123,9 +123,42 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
         free(full_obj);
         return 0;
     }
+// Step 6: Build shard directory path and final object path
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(&id, hex);
 
+    char shard_dir[512];
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", OBJECTS_DIR, hex);
+
+    char final_path[512];
+    object_path(&id, final_path, sizeof(final_path));
+
+    // Step 7: Create shard directory if it doesn't exist
+    mkdir(shard_dir, 0755);
+
+    // Step 8: Write to a temp file, fsync, then rename atomically
+    char tmp_path[512];
+    snprintf(tmp_path, sizeof(tmp_path) - 7, "%s/tmp_XXXXXX", shard_dir);
+    int fd = mkstemp(tmp_path);
+    if (fd < 0) { free(full_obj); return -1; }
+
+    ssize_t written = write(fd, full_obj, full_len);
     free(full_obj);
-    return -1; // not done yet
+    if (written < 0 || (size_t)written != full_len) {
+        close(fd); unlink(tmp_path); return -1;
+    }
+
+    if (fsync(fd) != 0) { close(fd); unlink(tmp_path); return -1; }
+    close(fd);
+
+    if (rename(tmp_path, final_path) != 0) { unlink(tmp_path); return -1; }
+
+    // Step 9: fsync the shard directory to persist the rename
+    int dir_fd = open(shard_dir, O_RDONLY);
+    if (dir_fd >= 0) { fsync(dir_fd); close(dir_fd); }
+
+    return 0;
+
 }
 // Read an object from the store.
 //
