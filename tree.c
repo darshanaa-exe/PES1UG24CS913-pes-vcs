@@ -216,5 +216,17 @@ int tree_from_index(ObjectID *id_out) {
         }
     }
 
-    return -1;
+        void *root_data = NULL;
+    size_t root_len = 0;
+
+    if (tree_serialize(&root, &root_data, &root_len) != 0) return -1;
+    if (object_write(OBJ_TREE, root_data, root_len, id_out) != 0) {
+        free(root_data);
+        return -1;
+    }
+
+    free(root_data);
+    return 0;
+}
+
 }
