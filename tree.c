@@ -172,9 +172,44 @@ int tree_from_index(ObjectID *id_out) {
             if (!exists) {
                 if (root.count >= MAX_TREE_ENTRIES) return -1;
 
+                Tree subtree;
+                subtree.count = 0;
+
+                for (int k = 0; k < index.count; k++) {
+                    const char *subpath = index.entries[k].path;
+
+                    if (strncmp(subpath, dirname, dirlen) == 0 &&
+                        subpath[dirlen] == '/') {
+
+                        const char *rest = subpath + dirlen + 1;
+
+                        /* Only include direct children of this directory */
+                        if (strchr(rest, '/')) continue;
+
+                        if (subtree.count >= MAX_TREE_ENTRIES) return -1;
+
+                        TreeEntry *subentry = &subtree.entries[subtree.count++];
+                        subentry->mode = index.entries[k].mode;
+                        subentry->hash = index.entries[k].hash;
+                        strncpy(subentry->name, rest, sizeof(subentry->name) - 1);
+                        subentry->name[sizeof(subentry->name) - 1] = '\0';
+                    }
+                }
+
+                void *subdata = NULL;
+                size_t sublen = 0;
+                ObjectID subtree_id;
+
+                if (tree_serialize(&subtree, &subdata, &sublen) != 0) return -1;
+                if (object_write(OBJ_TREE, subdata, sublen, &subtree_id) != 0) {
+                    free(subdata);
+                    return -1;
+                }
+                free(subdata);
+
                 TreeEntry *entry = &root.entries[root.count++];
                 entry->mode = MODE_DIR;
-                memset(&entry->hash, 0, sizeof(ObjectID));  // placeholder for now
+                entry->hash = subtree_id;
                 strncpy(entry->name, dirname, sizeof(entry->name) - 1);
                 entry->name[sizeof(entry->name) - 1] = '\0';
             }
