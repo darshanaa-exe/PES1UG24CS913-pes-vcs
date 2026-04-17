@@ -152,6 +152,32 @@ int tree_from_index(ObjectID *id_out) {
             entry->hash = index.entries[i].hash;
             strncpy(entry->name, path, sizeof(entry->name) - 1);
             entry->name[sizeof(entry->name) - 1] = '\0';
+        } else {
+            char dirname[256];
+            size_t dirlen = (size_t)(slash - path);
+            if (dirlen >= sizeof(dirname)) return -1;
+
+            memcpy(dirname, path, dirlen);
+            dirname[dirlen] = '\0';
+
+            int exists = 0;
+            for (int j = 0; j < root.count; j++) {
+                if (strcmp(root.entries[j].name, dirname) == 0 &&
+                    root.entries[j].mode == MODE_DIR) {
+                    exists = 1;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                if (root.count >= MAX_TREE_ENTRIES) return -1;
+
+                TreeEntry *entry = &root.entries[root.count++];
+                entry->mode = MODE_DIR;
+                memset(&entry->hash, 0, sizeof(ObjectID));  // placeholder for now
+                strncpy(entry->name, dirname, sizeof(entry->name) - 1);
+                entry->name[sizeof(entry->name) - 1] = '\0';
+            }
         }
     }
 
