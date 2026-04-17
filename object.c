@@ -182,6 +182,8 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 //
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
+
+
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
     // Step 1: Get the file path for this object
     char path[512];
@@ -204,26 +206,34 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     }
     fclose(f);
 
-    // Step 3: Parse the header — find the '\0' separator
+    // Step 3: Verify integrity — recompute hash and compare
+    ObjectID computed;
+    compute_hash(buf, (size_t)file_size, &computed);
+    if (memcmp(computed.hash, id->hash, HASH_SIZE) != 0) {
+        free(buf);
+        return -1;
+    }
+
+    // Step 4: Parse the header — find the '\0' separator
     uint8_t *null_ptr = memchr(buf, '\0', (size_t)file_size);
     if (!null_ptr) { free(buf); return -1; }
 
     char *header = (char *)buf;
     size_t header_len = (size_t)(null_ptr - buf);
 
-    // Step 4: Parse the type string
+    // Step 5: Parse the type string
     ObjectType obj_type;
     if (strncmp(header, "blob ", 5) == 0)        obj_type = OBJ_BLOB;
     else if (strncmp(header, "tree ", 5) == 0)   obj_type = OBJ_TREE;
     else if (strncmp(header, "commit ", 7) == 0) obj_type = OBJ_COMMIT;
     else { free(buf); return -1; }
 
-    // Step 5: Parse the size
+    // Step 6: Parse the size
     char *space = memchr(header, ' ', header_len);
     if (!space) { free(buf); return -1; }
     size_t data_size = (size_t)atol(space + 1);
 
-    // Step 6: Copy the data portion
+    // Step 7: Copy the data portion
     uint8_t *data_start = null_ptr + 1;
     size_t actual_data_len = (size_t)file_size - header_len - 1;
     if (actual_data_len != data_size) { free(buf); return -1; }
@@ -238,5 +248,4 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     if (len_out)  *len_out  = data_size;
 
     return 0;
-
 }
