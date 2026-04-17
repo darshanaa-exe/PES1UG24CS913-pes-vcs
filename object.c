@@ -183,7 +183,60 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 // The caller is responsible for calling free(*data_out).
 // Returns 0 on success, -1 on error (file not found, corrupt, etc.).
 int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_t *len_out) {
-    // TODO: Implement
-    (void)id; (void)type_out; (void)data_out; (void)len_out;
-    return -1;
+    // Step 1: Get the file path for this object
+    char path[512];
+    object_path(id, path, sizeof(path));
+
+    // Step 2: Open and read the entire file
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (file_size < 0) { fclose(f); return -1; }
+
+    uint8_t *buf = malloc((size_t)file_size);
+    if (!buf) { fclose(f); return -1; }
+
+    if (fread(buf, 1, (size_t)file_size, f) != (size_t)file_size) {
+        free(buf); fclose(f); return -1;
+    }
+    fclose(f);
+
+    // Step 3: Parse the header — find the '\0' separator
+    uint8_t *null_ptr = memchr(buf, '\0', (size_t)file_size);
+    if (!null_ptr) { free(buf); return -1; }
+
+    char *header = (char *)buf;
+    size_t header_len = (size_t)(null_ptr - buf);
+
+    // Step 4: Parse the type string
+    ObjectType obj_type;
+    if (strncmp(header, "blob ", 5) == 0)        obj_type = OBJ_BLOB;
+    else if (strncmp(header, "tree ", 5) == 0)   obj_type = OBJ_TREE;
+    else if (strncmp(header, "commit ", 7) == 0) obj_type = OBJ_COMMIT;
+    else { free(buf); return -1; }
+
+    // Step 5: Parse the size
+    char *space = memchr(header, ' ', header_len);
+    if (!space) { free(buf); return -1; }
+    size_t data_size = (size_t)atol(space + 1);
+
+    // Step 6: Copy the data portion
+    uint8_t *data_start = null_ptr + 1;
+    size_t actual_data_len = (size_t)file_size - header_len - 1;
+    if (actual_data_len != data_size) { free(buf); return -1; }
+
+    uint8_t *data_copy = malloc(data_size);
+    if (!data_copy) { free(buf); return -1; }
+    memcpy(data_copy, data_start, data_size);
+    free(buf);
+
+    if (type_out) *type_out = obj_type;
+    if (data_out) *data_out = data_copy;
+    if (len_out)  *len_out  = data_size;
+
+    return 0;
+
 }
