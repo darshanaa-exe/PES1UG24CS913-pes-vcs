@@ -244,9 +244,60 @@ int index_save(const Index *index) {
 //   - index_find                       : checking if the file is already staged
 //
 // Returns 0 on success, -1 on error.
+
+
+
 int index_add(Index *index, const char *path) {
-    // TODO: Implement file staging
-    // (See Lab Appendix for logical steps)
-    (void)index; (void)path;
-    return -1;
+    FILE *fp;
+    struct stat st;
+    void *buffer = NULL;
+    size_t size;
+    ObjectID blob_id;
+    IndexEntry *entry;
+
+    if (!index || !path) return -1;
+
+    if (stat(path, &st) != 0) return -1;
+    if (!S_ISREG(st.st_mode)) return -1;
+
+    fp = fopen(path, "rb");
+    if (!fp) return -1;
+
+    size = (size_t)st.st_size;
+    buffer = malloc(size ? size : 1);
+    if (!buffer) {
+        fclose(fp);
+        return -1;
+    }
+
+    if (size > 0 && fread(buffer, 1, size, fp) != size) {
+        free(buffer);
+        fclose(fp);
+        return -1;
+    }
+
+    fclose(fp);
+
+    if (object_write(OBJ_BLOB, buffer, size, &blob_id) != 0) {
+        free(buffer);
+        return -1;
+    }
+
+    free(buffer);
+
+    entry = index_find(index, path);
+
+    if (!entry) {
+        if (index->count >= MAX_INDEX_ENTRIES) return -1;
+        entry = &index->entries[index->count++];
+    }
+
+    entry->mode = (st.st_mode & S_IXUSR) ? 0100755 : 0100644;
+    entry->hash = blob_id;
+    entry->mtime_sec = (uint64_t)st.st_mtime;
+    entry->size = (uint32_t)st.st_size;
+    strncpy(entry->path, path, sizeof(entry->path) - 1);
+    entry->path[sizeof(entry->path) - 1] = '\0';
+
+    return 0;
 }
