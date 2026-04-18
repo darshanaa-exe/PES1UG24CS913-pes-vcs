@@ -164,38 +164,73 @@ int head_update(const ObjectID *new_commit) {
 
     char tmp_path[528];
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", target_path);
-    
+
     f = fopen(tmp_path, "w");
     if (!f) return -1;
-    
+
     char hex[HASH_HEX_SIZE + 1];
     hash_to_hex(new_commit, hex);
     fprintf(f, "%s\n", hex);
-    
+
     fflush(f);
     fsync(fileno(f));
     fclose(f);
-    
+
     return rename(tmp_path, target_path);
 }
 
-// ─── TODO: Implement these ───────────────────────────────────────────────────
+// ─── IMPLEMENTED ─────────────────────────────────────────────────────────────
 
 // Create a new commit from the current staging area.
 //
-// HINTS - Useful functions to call:
-//   - tree_from_index   : writes the directory tree and gets the root hash
-//   - head_read         : gets the parent commit hash (if any)
-//   - pes_author        : retrieves the author name string (from pes.h)
-//   - time(NULL)        : gets the current unix timestamp
-//   - commit_serialize  : converts the filled Commit struct to a text buffer
-//   - object_write      : saves the serialized text as OBJ_COMMIT
-//   - head_update       : moves the branch pointer to your new commit
+// Steps:
+//   1. Load the index and build a tree object from it via tree_from_index
+//   2. Try to read HEAD as the parent commit (will fail for the first commit)
+//   3. Fill in the Commit struct: tree, parent, author, timestamp, message
+//   4. Serialize the Commit struct to a text buffer via commit_serialize
+//   5. Write the buffer as OBJ_COMMIT via object_write
+//   6. Update HEAD to point to the new commit via head_update
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
-    (void)message; (void)commit_id_out;
-    return -1;
+    // Step 1: Build tree from the current index (tree_from_index loads it internally)
+    ObjectID tree_id;
+    if (tree_from_index(&tree_id) != 0) return -1;
+
+    // Step 2: Fill Commit struct
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+
+    commit.tree = tree_id;
+    commit.timestamp = (uint64_t)time(NULL);
+    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
+    snprintf(commit.message, sizeof(commit.message), "%s", message);
+
+    // Step 3: Try to read HEAD as parent (not an error if no commits yet)
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0) {
+        commit.parent = parent_id;
+        commit.has_parent = 1;
+    } else {
+        commit.has_parent = 0;
+    }
+
+    // Step 4: Serialize the commit struct to raw bytes
+    void *raw_data = NULL;
+    size_t raw_len = 0;
+    if (commit_serialize(&commit, &raw_data, &raw_len) != 0) return -1;
+
+    // Step 5: Write as OBJ_COMMIT to the object store
+    ObjectID commit_id;
+    if (object_write(OBJ_COMMIT, raw_data, raw_len, &commit_id) != 0) {
+        free(raw_data);
+        return -1;
+    }
+    free(raw_data);
+
+    // Step 6: Update HEAD to point to the new commit
+    if (head_update(&commit_id) != 0) return -1;
+
+    if (commit_id_out) *commit_id_out = commit_id;
+    return 0;
 }
