@@ -228,7 +228,7 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     }
     free(raw_data);
 
-    // Step 6: Update HEAD to point to the new commit
+    // Step 6: Atomically update HEAD ref to new commit hash to point to the new commit
     if (head_update(&commit_id) != 0) return -1;
 
     if (commit_id_out) *commit_id_out = commit_id;
