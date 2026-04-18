@@ -206,7 +206,7 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
     snprintf(commit.message, sizeof(commit.message), "%s", message);
 
-    // Step 3: Try to read HEAD as parent (not an error if no commits yet)
+    // Step 3: Populate author, timestamp, message fields as parent (not an error if no commits yet)
     ObjectID parent_id;
     if (head_read(&parent_id) == 0) {
         commit.parent = parent_id;
