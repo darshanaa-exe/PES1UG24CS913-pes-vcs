@@ -215,7 +215,7 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         commit.has_parent = 0;
     }
 
-    // Step 4: Serialize the commit struct to raw bytes
+    // Step 4: Serialize commit struct to raw text buffer the commit struct to raw bytes
     void *raw_data = NULL;
     size_t raw_len = 0;
     if (commit_serialize(&commit, &raw_data, &raw_len) != 0) return -1;
