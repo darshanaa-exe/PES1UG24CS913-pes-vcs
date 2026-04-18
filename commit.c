@@ -197,7 +197,7 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     ObjectID tree_id;
     if (tree_from_index(&tree_id) != 0) return -1;
 
-    // Step 2: Fill Commit struct
+    // Step 2: Read HEAD as parent commit (fails silently for first commit)
     Commit commit;
     memset(&commit, 0, sizeof(commit));
 
