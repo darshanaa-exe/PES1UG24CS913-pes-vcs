@@ -199,12 +199,40 @@ static int compare_index_entries(const void *a, const void *b) {
 }
 
 
-
 int index_save(const Index *index) {
-    // TODO: Implement atomic index saving
-    // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+    Index sorted;
+    FILE *fp;
+    char tmp_path[512];
+    char hex[HASH_HEX_SIZE + 1];
+
+    if (!index) return -1;
+
+    sorted = *index;
+    qsort(sorted.entries, sorted.count, sizeof(IndexEntry), compare_index_entries);
+
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", INDEX_FILE);
+
+    fp = fopen(tmp_path, "w");
+    if (!fp) return -1;
+
+    for (int i = 0; i < sorted.count; i++) {
+        hash_to_hex(&sorted.entries[i].hash, hex);
+
+        fprintf(fp, "%o %s %lu %u %s\n",
+                sorted.entries[i].mode,
+                hex,
+                sorted.entries[i].mtime_sec,
+                sorted.entries[i].size,
+                sorted.entries[i].path);
+    }
+
+    fflush(fp);
+    fsync(fileno(fp));
+    fclose(fp);
+
+    if (rename(tmp_path, INDEX_FILE) != 0) return -1;
+
+    return 0;
 }
 
 // Stage a file for the next commit.
