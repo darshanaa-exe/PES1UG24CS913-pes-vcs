@@ -299,5 +299,6 @@ int index_add(Index *index, const char *path) {
     strncpy(entry->path, path, sizeof(entry->path) - 1);
     entry->path[sizeof(entry->path) - 1] = '\0';
 
-    return 0;
+    return index_save(index);
+
 }
